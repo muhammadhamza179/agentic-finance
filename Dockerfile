@@ -1,3 +1,4 @@
+# Railway build fix - force rebuild
 FROM python:3.12-slim
 
 WORKDIR /app
