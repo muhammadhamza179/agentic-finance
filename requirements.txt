@@ -6,7 +6,7 @@ pydantic==2.8.0
 pydantic-settings==2.4.0
 openai==1.45.0
 asyncpg==0.29.0           # async PostgreSQL driver (Step 5)
-chromadb==0.5.0           # vector store (Step 15)
+# chromadb==0.5.0  # Will enable in Phase 4 (vector store)
 python-jose[cryptography]==3.3.0  # JWT (Step 9)
 passlib[bcrypt]==1.7.4    # password hashing (Step 10)
 redis==5.0.8              # caching (Step 39)
