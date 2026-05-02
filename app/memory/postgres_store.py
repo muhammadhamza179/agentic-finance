@@ -1,6 +1,8 @@
 import uuid
 import json
+import asyncio
 from app.database import get_pool
+from app.memory.embedder import embed_and_store_query
 
 
 async def create_session(user_id: int) -> str:
@@ -15,7 +17,7 @@ async def create_session(user_id: int) -> str:
     return session_id
 
 
-async def save_query(session_id: str, user_input: str, agent_response: str) -> int:
+async def save_query(session_id: str, user_input: str, agent_response: str, user_id: int) -> int:
     """Save a completed query+response. Returns query_id."""
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -24,7 +26,19 @@ async def save_query(session_id: str, user_input: str, agent_response: str) -> i
                VALUES ($1, $2, $3) RETURNING id""",
             session_id, user_input, agent_response
         )
-    return row["id"]
+    
+    query_id = row["id"]
+    
+    # Embed and store in vector DB (non-blocking)
+    asyncio.create_task(embed_and_store_query(
+        user_id=user_id,
+        session_id=session_id,
+        query_id=query_id,
+        user_input=user_input,
+        agent_response=agent_response
+    ))
+    
+    return query_id
 
 
 async def save_tool_call(

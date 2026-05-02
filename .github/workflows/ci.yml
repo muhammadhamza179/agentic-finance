@@ -1,0 +1,60 @@
+# .github/workflows/ci.yml
+
+name: Financial Agent CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: financial_agent_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: Set test environment
+        run: |
+          echo "OPENAI_API_KEY=test-key" >> $GITHUB_ENV
+          echo "ALPHA_VANTAGE_API_KEY=test-key" >> $GITHUB_ENV
+          echo "NEWS_API_KEY=test-key" >> $GITHUB_ENV
+          echo "JWT_SECRET_KEY=test-secret-key-32-chars-minimum" >> $GITHUB_ENV
+          echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/financial_agent_test" >> $GITHUB_ENV
+          echo "REDIS_URL=redis://localhost:6379" >> $GITHUB_ENV
+      
+      - name: Init test database
+        run: python scripts/init_db.py
+      
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+      
+      - name: Check code style
+        run: |
+          pip install ruff
+          ruff check app/

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
+from asyncpg.exceptions import UniqueViolationError
 from app.api.auth import (
     hash_password, verify_password,
     create_token, get_current_user
@@ -7,7 +8,7 @@ from app.api.auth import (
 from app.api.middleware import rate_limit
 from app.memory.session import get_or_create_session
 from app.database import get_pool
-from app.tools.stock_price import stock_price_tool  # ← ADD THIS
+from app.tools.stock_price import stock_price_tool
 
 router = APIRouter()
 
@@ -38,19 +39,35 @@ class QueryRequest(BaseModel):
 @router.post("/register", response_model=TokenResponse)
 async def register(body: RegisterRequest):
     pool = await get_pool()
+    email = body.email.strip()
     async with pool.acquire() as conn:
-        existing = await conn.fetchrow(
+        existing_user = await conn.fetchrow(
             "SELECT id FROM users WHERE username = $1", body.username
         )
-        if existing:
-            raise HTTPException(400, "Username already taken")
-        
-        row = await conn.fetchrow(
-            """INSERT INTO users (username, email, password_hash)
-               VALUES ($1, $2, $3) RETURNING id""",
-            body.username, body.email, hash_password(body.password)
+        if existing_user:
+            raise HTTPException(status_code=400, detail="Username already taken")
+
+        existing_email = await conn.fetchrow(
+            "SELECT id FROM users WHERE email = $1", email
         )
-    
+        if existing_email:
+            raise HTTPException(status_code=400, detail="Email already registered")
+
+        pw_hash = hash_password(body.password)
+        try:
+            row = await conn.fetchrow(
+                """INSERT INTO users (username, email, password_hash)
+                   VALUES ($1, $2, $3) RETURNING id""",
+                body.username,
+                email,
+                pw_hash,
+            )
+        except UniqueViolationError:
+            raise HTTPException(
+                status_code=400,
+                detail="Username or email already registered",
+            ) from None
+
     token = create_token(row["id"], body.username)
     return TokenResponse(access_token=token)
 
@@ -85,6 +102,35 @@ async def get_quote(symbol: str):
     """Get real-time stock price for any symbol."""
     result = await stock_price_tool.get_quote(symbol)
     return result
+
+
+# ------------------------------------------------------------
+# History Endpoint
+# ------------------------------------------------------------
+
+@router.get("/history")
+async def get_history(
+    limit: int = 10,
+    user: dict = Depends(get_current_user)
+):
+    """Get the authenticated user's recent queries."""
+    user_id = int(user["sub"])
+    
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT q.user_input, q.agent_response, q.created_at
+            FROM queries q
+            JOIN sessions s ON q.session_id = s.id
+            WHERE s.user_id = $1
+            ORDER BY q.created_at DESC
+            LIMIT $2
+        """, user_id, limit)
+    
+    return {
+        "queries": [dict(r) for r in rows],
+        "count": len(rows)
+    }
 
 
 # ------------------------------------------------------------

@@ -48,10 +48,21 @@ CREATE TABLE IF NOT EXISTS tool_calls (
 -- Logs table (Step 8)
 CREATE TABLE IF NOT EXISTS logs (
     id          SERIAL PRIMARY KEY,
-    level       TEXT NOT NULL,   -- info, warning, error
+    level       TEXT NOT NULL,
     event       TEXT NOT NULL,
     data        JSONB,
     created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Portfolio table (Step 5)
+CREATE TABLE IF NOT EXISTS portfolio (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER REFERENCES users(id),
+    symbol      TEXT NOT NULL,
+    shares      NUMERIC(12,4) NOT NULL,
+    buy_price   NUMERIC(12,4) NOT NULL,
+    added_at    TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (user_id, symbol)
 );
 """
 
