@@ -1,5 +1,3 @@
-# .github/workflows/ci.yml
-
 name: Financial Agent CI
 
 on:
@@ -52,7 +50,12 @@ jobs:
         run: python scripts/init_db.py
       
       - name: Run tests
-        run: pytest tests/ -v --tb=short
+        run: pytest tests/ -v --tb=short -k "not eval"
+      
+      - name: Run evaluation suite
+        run: python tests/eval_suite.py
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       
       - name: Check code style
         run: |
